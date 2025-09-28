@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Flappy PIXI Game</title>
+<style>
+  body {
+    margin: 0;
+    background: #7AC7EE;
+    overflow: hidden;
+  }
+  canvas {
+    display: block;
+    margin: 0 auto;
+  }
+</style>
+</head>
+<body>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.2.4/pixi.min.js"></script>
+<script>
+  // Paste the entire JS code you provided here
+  const WIDTH = 288;
+  const HEIGHT = 512;
+  const GROUND_HEIGHT = 112;
+  const GRAVITY = 0.5;
+  const FLAP_VELOCITY = -14;
+  const MAX_FALL_VELOCITY = 15;
+  const SCROLL_SPEED = 2;
+  const PIPE_WIDTH = 52;
+  const PIPE_GAP_HEIGHT = 140;
+  const PIPE_SPAWN_INTERVAL = 175;
+  const BIRD_X = WIDTH / 4;
+  const BIRD_RADIUS = 18;
+  const STATE_START = 0;
+  const STATE_PLAYING = 1;
+  const STATE_GAME_OVER = 2;
+
+  class Bird extends PIXI.Container {
+      constructor() {
+          super();
+          this.y = HEIGHT - GROUND_HEIGHT - BIRD_RADIUS;
+          this.x = BIRD_X;
+          this.vy = 0;
+          this.animFrame = 0;
+          this.animTimer = 0;
+          this.angle = 0;
+          this.idleTimer = 0;
+          this.flapQueued = false;
+          this.onGround = true;
+          this.createSprites();
+          this.setState(STATE_START);
+      }
+      createSprites() {
+          this.frames = [];
+          const bodyColor = 0xFEE140; 
+          const wingColor = 0xFECB2F; 
+          const eyeColor = 0x000000; 
+          const beakColor = 0xFFA500; 
+          const outlineColor = 0x8B4513; 
+          for (let i = 0; i < 3; i++) {
+              const g = new PIXI.Graphics();
+              g.lineStyle(2, outlineColor, 1);
+              g.beginFill(bodyColor);
+              g.drawRect(-BIRD_RADIUS, -BIRD_RADIUS / 2, BIRD_RADIUS * 2, BIRD_RADIUS);
+              g.endFill();
+              g.lineStyle(2, outlineColor, 1);
+              g.beginFill(wingColor);
+              if (i === 0) {
+                  g.drawRect(-BIRD_RADIUS * 0.5, BIRD_RADIUS * 0.2, BIRD_RADIUS * 0.8, BIRD_RADIUS * 0.4);
+              } else if (i === 1) {
+                  g.drawRect(-BIRD_RADIUS * 0.5, BIRD_RADIUS * 0.1, BIRD_RADIUS * 0.8, BIRD_RADIUS * 0.3);
+              } else {
+                  g.drawRect(-BIRD_RADIUS * 0.5, 0, BIRD_RADIUS * 0.8, BIRD_RADIUS * 0.3);
+              }
+              g.endFill();
+              g.lineStyle(2, outlineColor, 1);
+              g.beginFill(beakColor);
+              g.drawRect(BIRD_RADIUS * 0.8, -BIRD_RADIUS * 0.1, BIRD_RADIUS * 0.5, BIRD_RADIUS * 0.2);
+              g.endFill();
+              g.beginFill(eyeColor);
+              g.drawRect(BIRD_RADIUS * 0.4, -BIRD_RADIUS * 0.3, BIRD_RADIUS * 0.3, BIRD_RADIUS * 0.3);
+              g.endFill();
+              this.frames.push(app.renderer.generateTexture(g));
+          }
+          this.sprite = new PIXI.Sprite(this.frames[0]);
+          this.sprite.anchor.set(0.5);
+          this.addChild(this.sprite);
+      }
+      setState(state) {
+          this.state = state;
+          if(state === STATE_START) {
+              this.vy = 0;
+              this.angle = 0;
+              this.idleTimer = 0;
+              this.y = HEIGHT - GROUND_HEIGHT - BIRD_RADIUS;
+              this.onGround = true;
+          }
+          if(state === STATE_PLAYING) {
+              this.vy = 0;
+              this.angle = 0;
+              this.y = HEIGHT - GROUND_HEIGHT - BIRD_RADIUS;
+              this.onGround = true;
+          }
+          if(state === STATE_GAME_OVER) {
+              this.flapQueued = false;
+              this.vy = 0;
+              this.onGround = true;
+          }
+      }
+      flap() {
+          if(this.onGround) {
+              this.vy = FLAP_VELOCITY;
+              this.onGround = false;
+              this.flapQueued = true;
+          }
+      }
+      update(delta) {
+          if(this.state === STATE_START) {
+              this.animTimer += delta;
+              if(this.animTimer>6) {
+                  this.animFrame = (this.animFrame+1)%3;
+                  this.sprite.texture = this.frames[this.animFrame];
+                  this.animTimer=0;
+              }
+              this.angle = 0;
+              this.sprite.rotation = this.angle;
+          }
+          if(this.state === STATE_PLAYING) {
+              if(this.flapQueued){
+                  this.animFrame=1;
+                  this.flapQueued=false;
+              }
+              this.animTimer += delta;
+              if(this.animTimer>5) {
+                  this.animFrame = (this.animFrame+1)%3;
+                  this.sprite.texture = this.frames[this.animFrame];
+                  this.animTimer=0;
+              }
+              this.vy += GRAVITY*delta;
+              if(this.vy>MAX_FALL_VELOCITY) this.vy=MAX_FALL_VELOCITY;
+              this.y += this.vy*delta;
+              if (this.y > HEIGHT - GROUND_HEIGHT - BIRD_RADIUS) {
+                  this.y = HEIGHT - GROUND_HEIGHT - BIRD_RADIUS;
+                  this.vy = 0;
+                  this.onGround = true;
+              }
+              if (this.vy < 0) {
+                  this.angle = -0.3;
+              } else if (!this.onGround) {
+                  this.angle = 0.3;
+              } else {
+                  this.angle = 0;
+              }
+              this.sprite.rotation = this.angle;
+          }
+          if(this.state === STATE_GAME_OVER) {
+              this.vy += GRAVITY*delta;
+              if(this.vy>MAX_FALL_VELOCITY) this.vy=MAX_FALL_VELOCITY;
+              this.y += this.vy*delta;
+              if(this.y<HEIGHT-GROUND_HEIGHT-BIRD_RADIUS) {
+                  this.angle = Math.min(0.7, 0.1+this.vy/20);
+                  this.sprite.rotation = this.angle;
+              }
+          }
+      }
+      getBounds() {
+          return new PIXI.Rectangle(this.x-BIRD_RADIUS, this.y-BIRD_RADIUS, BIRD_RADIUS*2, BIRD_RADIUS*2);
+      }
+  }
+
+  class PipePair extends PIXI.Container {
+      constructor(gapY) {
+          super();
+          this.passed = false;
+          this.x = WIDTH + PIPE_WIDTH;
+          this.gapY = gapY;
+          this.createSprites();
+      }
+      createSprites() {
+          this.removeChildren();
+          const pipeTexture = PIXI.Texture.from('https://storage.googleapis.com/scraper_ludo/user_images_prod/c8b4826e85af9fd5258516a04cdaeb88.webp');
+          const capH = 20;
+          const topPipeBody = new PIXI.Sprite(pipeTexture);
+          topPipeBody.width = PIPE_WIDTH;
+          topPipeBody.height = this.gapY - PIPE_GAP_HEIGHT / 2 - capH;
+          topPipeBody.x = 0;
+          topPipeBody.y = 0;
+          this.addChild(topPipeBody);
+          const topPipeCap = new PIXI.Sprite(pipeTexture);
+          topPipeCap.width = PIPE_WIDTH;
+          topPipeCap.height = capH;
+          topPipeCap.x = 0;
+          topPipeCap.y = this.gapY - PIPE_GAP_HEIGHT / 2 - capH;
+          this.addChild(topPipeCap);
+          const bottomPipeBody = new PIXI.Sprite(pipeTexture);
+          bottomPipeBody.width = PIPE_WIDTH;
+          bottomPipeBody.height = HEIGHT - GROUND_HEIGHT - (this.gapY + PIPE_GAP_HEIGHT / 2 + capH);
+          bottomPipeBody.x = 0;
+          bottomPipeBody.y = this.gapY + PIPE_GAP_HEIGHT / 2 + capH;
+          this.addChild(bottomPipeBody);
+          const bottomPipeCap = new PIXI.Sprite(pipeTexture);
+          bottomPipeCap.width = PIPE_WIDTH;
+          bottomPipeCap.height = capH;
+          bottomPipeCap.x = 0;
+          bottomPipeCap.y = this.gapY + PIPE_GAP_HEIGHT / 2;
+          this.addChild(bottomPipeCap);
+          this.topRect = new PIXI.Rectangle(this.x,0,PIPE_WIDTH,this.gapY-PIPE_GAP_HEIGHT/2);
+          this.bottomRect = new PIXI.Rectangle(this.x,this.gapY+PIPE_GAP_HEIGHT/2,PIPE_WIDTH,HEIGHT-GROUND_HEIGHT-(this.gapY+PIPE_GAP_HEIGHT/2));
+      }
+      update(delta) {
+          this.x -= SCROLL_SPEED*delta;
+          this
